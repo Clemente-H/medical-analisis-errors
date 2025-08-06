@@ -98,7 +98,7 @@ if 'temp_explanation' not in st.session_state:
     st.session_state.temp_explanation = ""
 
 def show_login():
-    """Pantalla de login simple"""
+    """Pantalla de login con contraseña"""
     st.markdown("<h1 style='text-align: center;'>🏥 Sistema de Anotación Médica</h1>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns([1, 2, 1])
@@ -113,16 +113,32 @@ def show_login():
             format_func=lambda x: "-- Seleccionar --" if x == "" else x
         )
         
+        # Campo de contraseña
+        password = st.text_input(
+            "Contraseña:",
+            type="password",
+            placeholder="Ingresa la contraseña compartida"
+        )
+        
         if st.button("Entrar", type="primary", use_container_width=True):
+            # Verificar contraseña desde secrets
+            correct_password = st.secrets["users"]["shared_password"]
+            
             if username and username in allowed_users:
-                st.session_state.username = username
-                st.success(f"¡Bienvenido {username}!")
-                time.sleep(1)
-                st.rerun()
+                if password == correct_password:
+                    st.session_state.username = username
+                    st.success(f"¡Bienvenido {username}!")
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error("❌ Contraseña incorrecta")
             else:
-                st.error("Selecciona un usuario válido")
+                st.error("❌ Selecciona un usuario válido")
         
         st.markdown("</div>", unsafe_allow_html=True)
+        
+        # Nota informativa
+        st.info("💡 Solicita la contraseña al administrador del sistema")
 
 def extract_model_answer(json_str):
     """Extrae la respuesta del modelo"""
