@@ -1,3 +1,7 @@
 data/*
 *.jsonl
 *.pdf
+.streamlit/
+.DS_Store
+__pycache__/
+*.pyc
