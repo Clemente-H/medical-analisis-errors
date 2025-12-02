@@ -45,6 +45,7 @@ st.markdown("""
         border-radius: 8px;
         margin: 10px 0;
         border-left: 3px solid #4a4a4a;
+        color: white;
     }
     .progress-header {
         background-color: #2d2d2d;
@@ -159,27 +160,52 @@ def extract_model_answer(json_str):
     return None
 
 def load_data():
-    """Cargar datos desde archivo local"""
+    """Cargar datos desde archivos en carpeta preguntas-respuestas"""
     try:
         data = []
-        data_path = "data/preguntas.jsonl"
+        data_dir = "data/preguntas-respuestas"
         
-        if not os.path.exists(data_path):
-            st.error(f"No se encuentra el archivo de datos en {data_path}")
+        if not os.path.exists(data_dir):
+            st.error(f"No se encuentra la carpeta de datos en {data_dir}")
+            st.info("💡 Crea la carpeta 'data/preguntas-respuestas/' y coloca archivos .jsonl con el nombre del modelo (ej: GPT-4V.jsonl)")
             return None
         
-        with open(data_path, 'r', encoding='utf-8') as file:
-            for line in file:
-                if line.strip():
-                    item = json.loads(line)
-                    item['respuesta_extraida'] = extract_model_answer(item['respuesta_modelo'])
-                    data.append(item)
+        # Obtener todos los archivos .jsonl en la carpeta
+        jsonl_files = [f for f in os.listdir(data_dir) if f.endswith('.jsonl')]
+        
+        if not jsonl_files:
+            st.error(f"No se encontraron archivos .jsonl en {data_dir}")
+            st.info("💡 Coloca archivos .jsonl en la carpeta. El nombre del archivo será usado como nombre del modelo.")
+            return None
+        
+        # Leer cada archivo
+        for filename in sorted(jsonl_files):
+            modelo_name = filename.replace('.jsonl', '')
+            file_path = os.path.join(data_dir, filename)
+            
+            try:
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    for line_num, line in enumerate(file, 1):
+                        if line.strip():
+                            try:
+                                item = json.loads(line)
+                                item['respuesta_extraida'] = extract_model_answer(item['respuesta_modelo'])
+                                # Asignar modelo desde nombre de archivo (sobrescribe si existe en JSON)
+                                item['modelo'] = modelo_name
+                                data.append(item)
+                            except json.JSONDecodeError as e:
+                                st.warning(f"Error al parsear línea {line_num} en {filename}: {str(e)}")
+                                continue
+            except Exception as e:
+                st.warning(f"Error al leer archivo {filename}: {str(e)}")
+                continue
+        
+        if not data:
+            st.error("No se encontraron datos válidos en los archivos")
+            return None
         
         df = pd.DataFrame(data)
         df['es_correcta'] = df['respuesta_extraida'] == df['respuesta_correcta']
-        
-        if 'modelo' not in df.columns:
-            df['modelo'] = "GPT-4V"
         
         return df
     except Exception as e:
