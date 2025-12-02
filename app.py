@@ -45,6 +45,7 @@ st.markdown("""
         border-radius: 8px;
         margin: 10px 0;
         border-left: 3px solid #4a4a4a;
+        color: white;
     }
     .progress-header {
         background-color: #2d2d2d;
