@@ -53,6 +53,7 @@ st.markdown("""
         border-radius: 8px;
         margin-bottom: 20px;
         font-size: 1.1rem;
+        color: white;
     }
     .saved-indicator {
         color: #4CAF50;
