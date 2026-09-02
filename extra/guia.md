@@ -66,16 +66,13 @@ Esta aplicación permite categorizar y analizar los errores que cometen los mode
 > 
 > **Categorización**: E_Int - El modelo conoce que la vena porta da irrigación funcional, pero selecciona mal el número en la imagen.
 
-### E_Form - Error de Formulación de la Justificación 🟢
-**¿Cuándo usar?** La justificación está mal expresada
-- ❌ Justificación vaga o ambigua
-- ❌ Contradictoria o incompleta
-- ❌ Irrelevante para la pregunta específica
+### E_Otro - Otro tipo de error 🟢
+**¿Cuándo usar?** El error no corresponde a ninguna de las tres categorías anteriores
+- ❌ La falla principal no es visual, ni conceptual, ni de integración
+- ❌ La justificación es tan confusa o irrelevante que no permite identificar el tipo de error
+- ❌ El caso presenta un problema no previsto por la taxonomía
 
-### E_Mult - Error Múltiple o Indeterminado 🟣
-**¿Cuándo usar?** Combinación de errores o casos confusos
-- ❌ Hay errores de múltiples categorías simultáneamente
-- ❌ La justificación es tan confusa que no se puede categorizar claramente
+**Importante:** usa siempre el campo de contexto adicional para describir el error. Estas notas son las que permitirán detectar si hace falta una categoría nueva.
 
 ## 📝 Proceso de Categorización
 
@@ -92,8 +89,7 @@ Esta aplicación permite categorizar y analizar los errores que cometen los mode
 - **E_Vis**: "¿El modelo ve/identifica correctamente la estructura?"
 - **E_Con**: "¿El conocimiento médico utilizado es correcto?"
 - **E_Int**: "¿Conecta bien lo que ve con lo que pregunta?"
-- **E_Form**: "¿La justificación está bien formulada?"
-- **E_Mult**: "¿Hay múltiples tipos de error?"
+- **E_Otro**: "¿El error realmente no encaja en ninguna de las tres anteriores?"
 
 ## 🎯 Consejos para una Categorización Efectiva
 
@@ -104,8 +100,9 @@ Esta aplicación permite categorizar y analizar los errores que cometen los mode
 - **Revisa la imagen**: Siempre verifica qué está realmente señalado
 
 ### ⚠️ Casos Complicados:
-- **Múltiples errores**: Si hay 2+ errores claros de diferentes tipos → E_Mult
+- **Múltiples errores**: Si hay 2+ errores claros de diferentes tipos → elige el más determinante y explica el resto en las notas
 - **Error sutil**: Si es difícil de categorizar → usar notas para explicar
+- **No encaja en ninguna**: Solo entonces usar E_Otro, siempre acompañado de notas
 - **Respuesta parcialmente correcta**: Categorizar por el aspecto que falla
 
 ## 🔧 Funciones de la Interfaz

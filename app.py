@@ -68,27 +68,26 @@ st.markdown("""
 
 # Categorías de error
 ERROR_CATEGORIES = {
-    "E_Vis": "Error de Percepción Visual",
-    "E_Con": "Error Conceptual o de Conocimiento Médico",
-    "E_Int": "Error de Integración Imagen-Texto",
-    "E_Form": "Error de Formulación de la Justificación",
-    "E_Mult": "Error Múltiple o Indeterminado"
-}
-
-ERROR_DESCRIPTIONS = {
-    "E_Vis": "El modelo no interpreta correctamente lo que ve en la imagen",
-    "E_Con": "Error en el conocimiento médico o razonamiento",
-    "E_Int": "Falla al conectar la imagen con la pregunta o conocimiento",
-    "E_Form": "La justificación está mal expresada o es ambigua",
-    "E_Mult": "Múltiples errores o no se puede determinar"
-}
-
-ERROR_ICONS = {
-    "E_Vis": "👁️",
-    "E_Con": "🧠",
-    "E_Int": "🔗",
-    "E_Form": "📝",
-    "E_Mult": "❓"
+    "E_Vis": {
+        "nombre": "Error de Percepción Visual",
+        "descripcion": "El modelo no interpreta correctamente lo que ve en la imagen",
+        "icono": "👁️"
+    },
+    "E_Con": {
+        "nombre": "Error Conceptual o de Conocimiento Médico",
+        "descripcion": "Error en el conocimiento médico o razonamiento",
+        "icono": "🧠"
+    },
+    "E_Int": {
+        "nombre": "Error de Integración Imagen-Texto",
+        "descripcion": "Falla al conectar la imagen con la pregunta o conocimiento",
+        "icono": "🔗"
+    },
+    "E_Otro": {
+        "nombre": "Otro tipo de error",
+        "descripcion": "Otro tipo de error que no está contenido en las opciones anteriores",
+        "icono": "❓"
+    }
 }
 
 # Inicialización
@@ -458,14 +457,13 @@ if st.session_state.get('filtered_data') is not None and len(st.session_state.fi
             st.caption("Selecciona la categoría de error que mejor describe el problema principal:")
             
             # Botones de categorías (verticales) - NO GUARDAN, solo actualizan temporal
-            for cat_code, cat_name in ERROR_CATEGORIES.items():
-                icon = ERROR_ICONS[cat_code]
+            for cat_code, cat_info in ERROR_CATEGORIES.items():
                 is_selected = st.session_state.temp_category == cat_code
                 
                 if st.button(
-                    f"{icon} {cat_code}: {cat_name}",
+                    f"{cat_info['icono']} {cat_code}: {cat_info['nombre']}",
                     key=f"cat_{cat_code}",
-                    help=ERROR_DESCRIPTIONS[cat_code],
+                    help=cat_info['descripcion'],
                     type="primary" if is_selected else "secondary",
                     use_container_width=True
                 ):
