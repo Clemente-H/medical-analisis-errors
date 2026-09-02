@@ -87,6 +87,11 @@ ERROR_CATEGORIES = {
         "descripcion": "Falla al conectar la imagen con la pregunta o conocimiento",
         "icono": "🔗"
     },
+    "E_Just": {
+        "nombre": "Respuesta Incorrecta, Justificación Correcta",
+        "descripcion": "El razonamiento del modelo es correcto, pero la alternativa seleccionada no coincide con esa justificación",
+        "icono": "🎯"
+    },
     "E_Otro": {
         "nombre": "Otro tipo de error",
         "descripcion": "Otro tipo de error que no está contenido en las opciones anteriores",

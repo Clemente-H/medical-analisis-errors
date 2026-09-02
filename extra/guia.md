@@ -66,6 +66,22 @@ Esta aplicación permite categorizar y analizar los errores que cometen los mode
 > 
 > **Categorización**: E_Int - El modelo conoce que la vena porta da irrigación funcional, pero selecciona mal el número en la imagen.
 
+### E_Just - Respuesta Incorrecta, Justificación Correcta 🎯
+**¿Cuándo usar?** El razonamiento es correcto, pero la alternativa marcada no coincide con él
+- ❌ La justificación describe correctamente la estructura y el concepto, pero la letra seleccionada corresponde a otra alternativa
+- ❌ El modelo llega a la conclusión correcta en el texto y luego elige mal al traducirla a una opción
+- ❌ La justificación menciona explícitamente el contenido de la alternativa correcta, pero responde otra
+
+**Ejemplo:**
+> **Pregunta**: ¿Qué estructura corresponde al número 4?
+> **Respuesta correcta**: B (Vena cava inferior)
+> **Respuesta del modelo**: D (Aorta abdominal)
+> **Justificación**: "El número 4 señala un vaso de pared delgada a la derecha de la línea media, que corresponde a la vena cava inferior."
+>
+> **Categorización**: E_Just - El razonamiento identifica correctamente la vena cava inferior, pero la alternativa marcada no corresponde a esa conclusión.
+
+**Diferencia con E_Int:** en E_Int el modelo falla al conectar lo que ve con la pregunta (por ejemplo, asocia mal un número de la imagen). En E_Just la cadena de razonamiento está completa y es correcta; la falla ocurre solo al seleccionar la alternativa.
+
 ### E_Otro - Otro tipo de error 🟢
 **¿Cuándo usar?** El error no corresponde a ninguna de las tres categorías anteriores
 - ❌ La falla principal no es visual, ni conceptual, ni de integración
@@ -89,6 +105,7 @@ Esta aplicación permite categorizar y analizar los errores que cometen los mode
 - **E_Vis**: "¿El modelo ve/identifica correctamente la estructura?"
 - **E_Con**: "¿El conocimiento médico utilizado es correcto?"
 - **E_Int**: "¿Conecta bien lo que ve con lo que pregunta?"
+- **E_Just**: "¿La justificación es correcta y aun así marcó otra alternativa?"
 - **E_Otro**: "¿El error realmente no encaja en ninguna de las tres anteriores?"
 
 ## 🎯 Consejos para una Categorización Efectiva
@@ -102,6 +119,7 @@ Esta aplicación permite categorizar y analizar los errores que cometen los mode
 ### ⚠️ Casos Complicados:
 - **Múltiples errores**: Si hay 2+ errores claros de diferentes tipos → elige el más determinante y explica el resto en las notas
 - **Error sutil**: Si es difícil de categorizar → usar notas para explicar
+- **Justificación correcta pero respuesta mala**: Si el razonamiento no tiene fallas y solo la letra elegida es inconsistente → E_Just
 - **No encaja en ninguna**: Solo entonces usar E_Otro, siempre acompañado de notas
 - **Respuesta parcialmente correcta**: Categorizar por el aspecto que falla
 
@@ -129,6 +147,7 @@ Esta aplicación permite categorizar y analizar los errores que cometen los mode
 - **E_Vis frecuente**: El modelo tiene problemas de percepción visual
 - **E_Con frecuente**: Necesita mejor entrenamiento en conocimiento médico
 - **E_Int frecuente**: Falla en la integración multimodal
+- **E_Just frecuente**: El modelo razona bien pero falla al expresar su conclusión en el formato de alternativas
 - **Variación por categoría**: Algunos temas son más difíciles que otros
 
 ### Uso de Estadísticas:
