@@ -12,6 +12,10 @@ from utils import (
     get_all_annotations_summary
 )
 
+# Nombre del archivo (sin extensión) con las preguntas de práctica para que
+# los médicos se familiaricen con la plataforma. Se aísla del set de evaluación.
+TRAINING_MODEL_NAME = "0_preguntas_entrenamiento"
+
 # Configuración de la página
 st.set_page_config(
     page_title="Categorizador de Errores - Modelos Médicos",
@@ -206,6 +210,7 @@ def load_data():
         
         df = pd.DataFrame(data)
         df['es_correcta'] = df['respuesta_extraida'] == df['respuesta_correcta']
+        df['es_entrenamiento'] = df['modelo'] == TRAINING_MODEL_NAME
         
         return df
     except Exception as e:
@@ -220,8 +225,16 @@ def filter_data():
         if st.session_state.get('display_only_incorrect', True):
             filtered = filtered[~filtered['es_correcta']]
         
-        if st.session_state.get('filter_by_model', "Todos") != "Todos":
-            filtered = filtered[filtered['modelo'] == st.session_state.filter_by_model]
+        # --- Filtro original por modelo (comentado: el evaluador no debe saber
+        # --- qué modelo está evaluando). Se reemplaza por el filtro de modo.
+        # if st.session_state.get('filter_by_model', "Todos") != "Todos":
+        #     filtered = filtered[filtered['modelo'] == st.session_state.filter_by_model]
+        
+        # "Testeo" muestra sólo las preguntas de práctica; "Evaluaciones" las excluye.
+        if st.session_state.get('filter_by_mode', "Evaluaciones") == "Testeo":
+            filtered = filtered[filtered['es_entrenamiento']]
+        else:
+            filtered = filtered[~filtered['es_entrenamiento']]
         
         if st.session_state.get('filter_by_category_1', "Todas") != "Todas":
             filtered = filtered[filtered['categoria_1'] == st.session_state.filter_by_category_1]
@@ -345,15 +358,31 @@ with st.sidebar:
         st.session_state.display_only_incorrect = only_incorrect
         filter_data()
     
-    if 'models_list' in st.session_state:
-        model = st.selectbox(
-            "Modelo",
-            st.session_state.models_list,
-            key='filter_model_select'
-        )
-        if model != st.session_state.get('filter_by_model', "Todos"):
-            st.session_state.filter_by_model = model
-            filter_data()
+    # --- Dropdown original de modelo (comentado: mostrar el modelo sesga la
+    # --- evaluación). Se conserva para poder retomarlo.
+    # if 'models_list' in st.session_state:
+    #     model = st.selectbox(
+    #         "Modelo",
+    #         st.session_state.models_list,
+    #         key='filter_model_select'
+    #     )
+    #     if model != st.session_state.get('filter_by_model', "Todos"):
+    #         st.session_state.filter_by_model = model
+    #         filter_data()
+    
+    mode = st.selectbox(
+        "Modo",
+        ["Evaluaciones", "Testeo"],
+        key='filter_mode_select'
+    )
+    if mode != st.session_state.get('filter_by_mode', "Evaluaciones"):
+        st.session_state.filter_by_mode = mode
+        # Los dos conjuntos tienen largos distintos: partir desde la primera
+        # pregunta y descartar la selección temporal de la pregunta anterior.
+        st.session_state.current_index = 0
+        st.session_state.temp_category = None
+        st.session_state.temp_explanation = ""
+        filter_data()
     
     if 'categories_1' in st.session_state:
         cat1 = st.selectbox(
@@ -382,7 +411,7 @@ if st.session_state.get('filtered_data') is not None and len(st.session_state.fi
     st.markdown(f"""
     <div class='progress-header'>
     Pregunta {st.session_state.current_index + 1} de {len(st.session_state.filtered_data)} | 
-    ID: {row['id']} | Modelo: {row['modelo']} | 
+    ID: {row['id']} | 
     Anotadas por ti: {len(st.session_state.user_annotations)}
     </div>
     """, unsafe_allow_html=True)
