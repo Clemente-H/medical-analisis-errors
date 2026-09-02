@@ -1,0 +1,8 @@
+{
+  "_comentario": "Lista de usuarios habilitados para entrar a la app. Para agregar o quitar un medico, edita 'allowed' y haz push: no requiere tocar los secrets de Streamlit Cloud. La contrasena compartida NO va aqui, sigue en los secrets.",
+  "allowed": [
+    "Veronica",
+    "Emilio",
+    "medico3"
+  ]
+}

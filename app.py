@@ -16,6 +16,28 @@ from utils import (
 # los médicos se familiaricen con la plataforma. Se aísla del set de evaluación.
 TRAINING_MODEL_NAME = "0_preguntas_entrenamiento"
 
+# Archivo (versionado en el repo) con la lista de usuarios habilitados. Se lee
+# desde aqui y no desde los secrets para poder agregar o quitar medicos con un
+# push, sin depender del panel de Streamlit Cloud del duenio de la app.
+USERS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "users.json")
+
+
+def load_allowed_users():
+    """Lista de usuarios habilitados: users.json, con los secrets como respaldo"""
+    try:
+        with open(USERS_FILE, encoding="utf-8") as f:
+            allowed = json.load(f)["allowed"]
+        if allowed:
+            return list(allowed)
+    except Exception:
+        pass
+
+    # Respaldo para despliegues antiguos que todavia definen [users].allowed
+    try:
+        return list(st.secrets["users"]["allowed"])
+    except Exception:
+        return []
+
 # Configuración de la página
 st.set_page_config(
     page_title="Categorizador de Errores - Modelos Médicos",
@@ -116,7 +138,11 @@ def show_login():
         st.markdown("<div class='login-container'>", unsafe_allow_html=True)
         st.markdown("<h3 style='text-align: center;'>Iniciar Sesión</h3>", unsafe_allow_html=True)
         
-        allowed_users = st.secrets["users"]["allowed"]
+        allowed_users = load_allowed_users()
+        if not allowed_users:
+            st.error("No hay usuarios configurados. Revisa users.json en el repositorio.")
+            st.stop()
+
         username = st.selectbox(
             "Selecciona tu usuario:",
             options=[""] + allowed_users,
