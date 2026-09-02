@@ -349,14 +349,17 @@ with st.sidebar:
     # Filtros básicos
     st.markdown("### Filtros")
     
-    only_incorrect = st.checkbox(
-        "Solo incorrectas", 
-        value=st.session_state.get('display_only_incorrect', True),
-        key='filter_incorrect'
-    )
-    if only_incorrect != st.session_state.get('display_only_incorrect', True):
-        st.session_state.display_only_incorrect = only_incorrect
-        filter_data()
+    # --- Checkbox "Solo incorrectas" (comentado: los archivos actuales sólo
+    # --- contienen respuestas incorrectas, así que el filtro es innecesario).
+    # --- Al no existir el widget, filter_data() usa su default True.
+    # only_incorrect = st.checkbox(
+    #     "Solo incorrectas", 
+    #     value=st.session_state.get('display_only_incorrect', True),
+    #     key='filter_incorrect'
+    # )
+    # if only_incorrect != st.session_state.get('display_only_incorrect', True):
+    #     st.session_state.display_only_incorrect = only_incorrect
+    #     filter_data()
     
     # --- Dropdown original de modelo (comentado: mostrar el modelo sesga la
     # --- evaluación). Se conserva para poder retomarlo.
