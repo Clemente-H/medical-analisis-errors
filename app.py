@@ -478,7 +478,7 @@ if st.session_state.get('filtered_data') is not None and len(st.session_state.fi
                 value=st.session_state.temp_explanation,
                 height=120,
                 placeholder="¿Por qué elegiste esta categoría? ¿Qué error específico cometió el modelo?",
-                key='explanation_field'
+                key=f"explanation_{current_key}"
             )
             
             # Indicador de cambios sin guardar
