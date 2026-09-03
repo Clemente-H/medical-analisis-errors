@@ -675,7 +675,7 @@ if st.session_state.get('filtered_data') is not None and len(st.session_state.fi
                 or st.session_state.temp_explanation != existing_annotation.get('explicacion', '')
             )
             if hay_cambios_sin_guardar:
-                st.warning("⚠️ Cambios sin guardar")
+                st.warning("⚠️ Cambios sin guardar - se guardan solos al pasar de pregunta")
             
             # Guardar sin navegar: imprescindible en la última pregunta, donde
             # "Siguiente" está deshabilitado y antes no había forma de guardar.
@@ -696,20 +696,25 @@ if st.session_state.get('filtered_data') is not None and len(st.session_state.fi
         # Navegación - al navegar también se guarda
         st.divider()
         st.markdown("### Navegación")
-        
+
+        if not row['es_correcta']:
+            st.caption("💾 Tu respuesta se guarda automáticamente al pasar de pregunta.")
+
         col1, col2 = st.columns(2)
         with col1:
             if st.button(
                 "⬅️ Anterior",
                 disabled=st.session_state.current_index <= 0,
+                help="Guarda tu respuesta y vuelve a la pregunta anterior",
                 use_container_width=True
             ):
                 save_and_navigate(st.session_state.current_index - 1)
-        
+
         with col2:
             if st.button(
                 "Siguiente ➡️",
                 disabled=st.session_state.current_index >= len(st.session_state.filtered_data) - 1,
+                help="Guarda tu respuesta y avanza a la siguiente pregunta",
                 use_container_width=True,
                 type="primary"
             ):
