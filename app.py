@@ -347,6 +347,22 @@ def resume_index(filtered, user_annotations, last_id, last_modelo):
     # 3. Todo anotado: dejarlo en la última
     return len(filtered) - 1
 
+def last_answered_position(filtered, user_annotations):
+    """Posición (contando desde 1) de la pregunta respondida más avanzada.
+
+    Sirve para saber hasta dónde llegó el recorrido y poder volver ahí.
+    Devuelve None si todavía no hay ninguna respondida.
+    """
+    if filtered is None or len(filtered) == 0:
+        return None
+
+    for pos in range(len(filtered) - 1, -1, -1):
+        fila = filtered.iloc[pos]
+        if f"{fila['id']}-{fila['modelo']}" in user_annotations:
+            return pos + 1
+
+    return None
+
 def save_current_annotation():
     """Guardar la anotación de la pregunta actual en Google Sheets.
 
@@ -531,23 +547,6 @@ with st.sidebar:
             st.session_state.filter_by_category_1 = cat1
             filter_data()
 
-    # Salto directo: sin esto, volver a la pregunta 90 tras una desconexión
-    # exigía 90 clicks en "Siguiente".
-    total_preguntas = len(st.session_state.get('filtered_data', []))
-    if total_preguntas > 0:
-        st.divider()
-        st.markdown("### Ir a pregunta")
-        # Sin key explícita, para que el campo siga al índice actual al navegar.
-        destino = st.number_input(
-            f"Número (1 a {total_preguntas})",
-            min_value=1,
-            max_value=total_preguntas,
-            value=st.session_state.current_index + 1,
-            step=1
-        )
-        if st.button("Ir", use_container_width=True):
-            save_and_navigate(int(destino) - 1)
-
 # CONTENIDO PRINCIPAL
 st.title("🏥 Categorizador de Errores en Modelos Médicos Multimodales")
 
@@ -719,6 +718,42 @@ if st.session_state.get('filtered_data') is not None and len(st.session_state.fi
                 type="primary"
             ):
                 save_and_navigate(st.session_state.current_index + 1)
+
+        # Salto directo: sin esto, volver a la pregunta 90 tras una desconexión
+        # exigía 90 clicks en "Siguiente".
+        st.divider()
+        st.markdown("#### Ir a una pregunta")
+
+        total_preguntas = len(st.session_state.filtered_data)
+        ultima_respondida = last_answered_position(
+            st.session_state.filtered_data,
+            st.session_state.user_annotations
+        )
+        if ultima_respondida:
+            st.caption(
+                f"Última pregunta respondida: **{ultima_respondida}** de {total_preguntas}"
+            )
+        else:
+            st.caption("Todavía no has respondido ninguna pregunta.")
+
+        col_num, col_ir = st.columns([2, 1])
+        with col_num:
+            # Sin key explícita, para que el campo siga al índice actual al navegar.
+            destino = st.number_input(
+                "Número de pregunta",
+                min_value=1,
+                max_value=total_preguntas,
+                value=st.session_state.current_index + 1,
+                step=1,
+                label_visibility="collapsed"
+            )
+        with col_ir:
+            if st.button(
+                "Ir",
+                help="Guarda tu respuesta y salta a esa pregunta",
+                use_container_width=True
+            ):
+                save_and_navigate(int(destino) - 1)
 
 else:
     st.info("No hay datos que mostrar. Verifica los filtros en la barra lateral.")
