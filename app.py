@@ -477,14 +477,6 @@ with st.sidebar:
     # Progreso
     total_anotadas = len(st.session_state.user_annotations)
     st.metric("Tus anotaciones", total_anotadas)
-
-    # Resincronizar a mano, ya que las anotaciones no se releen al navegar
-    if st.button("🔄 Recargar anotaciones", use_container_width=True):
-        st.session_state.user_annotations = get_user_annotations(
-            st.session_state.gsheets,
-            st.session_state.username
-        )
-        st.rerun()
     
     st.divider()
     
