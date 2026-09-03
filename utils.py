@@ -62,18 +62,18 @@ def init_gsheets_connection():
             # Verificar si tiene headers
             if not progress_sheet.get_all_values():
                 progress_sheet.append_row([
-                    "usuario", "ultima_pregunta_id", "total_anotadas", 
-                    "ultima_actualizacion"
+                    "usuario", "ultima_pregunta_id", "total_anotadas",
+                    "ultima_actualizacion", "ultimo_modelo"
                 ])
         except:
             progress_sheet = spreadsheet.add_worksheet(
-                title="progreso_usuarios", 
-                rows=100, 
+                title="progreso_usuarios",
+                rows=100,
                 cols=5
             )
             progress_sheet.append_row([
-                "usuario", "ultima_pregunta_id", "total_anotadas", 
-                "ultima_actualizacion"
+                "usuario", "ultima_pregunta_id", "total_anotadas",
+                "ultima_actualizacion", "ultimo_modelo"
             ])
         
         return {
@@ -162,7 +162,7 @@ def get_user_annotations(gsheets, username):
         st.error(f"Error recuperando anotaciones: {str(e)}")
         return {}
 
-def update_user_progress(gsheets, username, pregunta_id, total_anotadas):
+def update_user_progress(gsheets, username, pregunta_id, total_anotadas, modelo=""):
     """Actualizar progreso del usuario"""
     try:
         sheet = gsheets['progress']
@@ -179,20 +179,41 @@ def update_user_progress(gsheets, username, pregunta_id, total_anotadas):
                     break
         
         row_data = [
-            username, 
-            str(pregunta_id), 
-            str(total_anotadas), 
-            timestamp
+            username,
+            str(pregunta_id),
+            str(total_anotadas),
+            timestamp,
+            str(modelo)
         ]
-        
+
         if user_row:
-            sheet.update(f'A{user_row}:D{user_row}', [row_data])
+            sheet.update(f'A{user_row}:E{user_row}', [row_data])
         else:
             sheet.append_row(row_data)
-    
+
     except Exception as e:
         # No mostrar error para no interrumpir flujo
         pass
+
+def get_user_progress(gsheets, username):
+    """Última pregunta registrada para el usuario.
+
+    Devuelve (pregunta_id, modelo) para poder retomar la sesión donde quedó.
+    Las filas escritas antes de que existiera la columna del modelo devuelven
+    el modelo vacío; quien llama debe tolerarlo.
+    """
+    try:
+        sheet = gsheets['progress']
+        all_values = sheet.get_all_values()
+
+        for row in all_values[1:]:  # Skip header
+            if len(row) > 1 and row[0] == username:
+                return row[1], (row[4] if len(row) > 4 else "")
+
+    except Exception as e:
+        pass
+
+    return None, ""
 
 def get_all_annotations_summary(gsheets):
     """Obtener resumen de todas las anotaciones para estadísticas"""

@@ -5,10 +5,11 @@ import os
 from datetime import datetime
 import time
 from utils import (
-    init_gsheets_connection, 
-    save_annotation, 
+    init_gsheets_connection,
+    save_annotation,
     get_user_annotations,
     update_user_progress,
+    get_user_progress,
     get_all_annotations_summary
 )
 
@@ -283,6 +284,35 @@ def format_justification(justification):
             return parts[1].replace("json\n", "")
     return justification
 
+def resume_index(filtered, user_annotations, last_id, last_modelo):
+    """Índice en el que debe retomar el usuario al abrir la sesión.
+
+    El estado vive en session_state, así que una desconexión del websocket o un
+    reinicio del contenedor devolvían al médico a la pregunta 1 aunque llevara
+    90 anotadas. El progreso ya se escribía en la hoja, pero nadie lo leía.
+    """
+    if filtered is None or len(filtered) == 0:
+        return 0
+
+    # 1. La pregunta exacta que quedó registrada en la hoja de progreso.
+    # Se compara también el modelo porque los ids se repiten entre modelos.
+    if last_id:
+        for pos in range(len(filtered)):
+            fila = filtered.iloc[pos]
+            mismo_id = str(fila['id']) == str(last_id)
+            mismo_modelo = not last_modelo or fila['modelo'] == last_modelo
+            if mismo_id and mismo_modelo:
+                return pos
+
+    # 2. Si no se puede resolver, la primera pregunta que aún no ha anotado
+    for pos in range(len(filtered)):
+        fila = filtered.iloc[pos]
+        if f"{fila['id']}-{fila['modelo']}" not in user_annotations:
+            return pos
+
+    # 3. Todo anotado: dejarlo en la última
+    return len(filtered) - 1
+
 def save_current_annotation():
     """Guardar la anotación de la pregunta actual en Google Sheets.
 
@@ -324,7 +354,8 @@ def save_current_annotation():
             st.session_state.gsheets,
             st.session_state.username,
             row['id'],
-            len(st.session_state.user_annotations)
+            len(st.session_state.user_annotations),
+            row['modelo']
         )
 
     return result
@@ -390,6 +421,18 @@ if 'data' not in st.session_state:
         st.session_state.categories_1 = ["Todas"] + sorted(data['categoria_1'].unique().tolist())
         st.session_state.categories_2 = ["Todas"] + sorted(data['categoria_2'].unique().tolist())
         filter_data()
+
+        # Retomar donde quedó en vez de empezar siempre en la pregunta 1
+        last_id, last_modelo = get_user_progress(
+            st.session_state.gsheets,
+            st.session_state.username
+        )
+        st.session_state.current_index = resume_index(
+            st.session_state.get('filtered_data'),
+            st.session_state.user_annotations,
+            last_id,
+            last_modelo
+        )
 
 # SIDEBAR
 with st.sidebar:
@@ -458,6 +501,23 @@ with st.sidebar:
         if cat1 != st.session_state.get('filter_by_category_1', "Todas"):
             st.session_state.filter_by_category_1 = cat1
             filter_data()
+
+    # Salto directo: sin esto, volver a la pregunta 90 tras una desconexión
+    # exigía 90 clicks en "Siguiente".
+    total_preguntas = len(st.session_state.get('filtered_data', []))
+    if total_preguntas > 0:
+        st.divider()
+        st.markdown("### Ir a pregunta")
+        # Sin key explícita, para que el campo siga al índice actual al navegar.
+        destino = st.number_input(
+            f"Número (1 a {total_preguntas})",
+            min_value=1,
+            max_value=total_preguntas,
+            value=st.session_state.current_index + 1,
+            step=1
+        )
+        if st.button("Ir", use_container_width=True):
+            save_and_navigate(int(destino) - 1)
 
 # CONTENIDO PRINCIPAL
 st.title("🏥 Categorizador de Errores en Modelos Médicos Multimodales")
