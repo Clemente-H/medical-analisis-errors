@@ -283,41 +283,72 @@ def format_justification(justification):
             return parts[1].replace("json\n", "")
     return justification
 
-def save_and_navigate(next_index):
-    """Guardar anotación actual y navegar"""
-    # Solo guardar si hay una categoría seleccionada temporalmente
-    if st.session_state.temp_category and not st.session_state.filtered_data.iloc[st.session_state.current_index]['es_correcta']:
-        row = st.session_state.filtered_data.iloc[st.session_state.current_index]
-        current_key = f"{row['id']}-{row['modelo']}"
-        
-        # Guardar en Google Sheets
-        result = save_annotation(
+def save_current_annotation():
+    """Guardar la anotación de la pregunta actual en Google Sheets.
+
+    Devuelve el resultado de save_annotation ("guardada" / "actualizada" /
+    "error"), o None si no había nada que guardar. Se separó de la navegación
+    para que el guardado no dependa de poder avanzar de pregunta.
+    """
+    if not st.session_state.temp_category:
+        return None
+
+    row = st.session_state.filtered_data.iloc[st.session_state.current_index]
+    if row['es_correcta']:
+        return None
+
+    current_key = f"{row['id']}-{row['modelo']}"
+
+    result = save_annotation(
+        st.session_state.gsheets,
+        st.session_state.username,
+        row['id'],
+        row['modelo'],
+        st.session_state.temp_category,
+        st.session_state.temp_explanation,
+        row['es_correcta'],
+        row['categoria_1'],
+        row['categoria_2']
+    )
+
+    if result != "error":
+        # Actualizar cache local
+        st.session_state.user_annotations[current_key] = {
+            'categoria': st.session_state.temp_category,
+            'explicacion': st.session_state.temp_explanation,
+            'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+        # Actualizar progreso
+        update_user_progress(
             st.session_state.gsheets,
             st.session_state.username,
             row['id'],
-            row['modelo'],
-            st.session_state.temp_category,
-            st.session_state.temp_explanation,
-            row['es_correcta'],
-            row['categoria_1'],
-            row['categoria_2']
+            len(st.session_state.user_annotations)
         )
-        
-        if result != "error":
-            # Actualizar cache local
-            st.session_state.user_annotations[current_key] = {
-                'categoria': st.session_state.temp_category,
-                'explicacion': st.session_state.temp_explanation,
-                'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
-            
-            # Actualizar progreso
-            update_user_progress(
-                st.session_state.gsheets,
-                st.session_state.username,
-                row['id'],
-                len(st.session_state.user_annotations)
-            )
+
+    return result
+
+def save_only():
+    """Guardar sin moverse de pregunta.
+
+    Es la única forma de registrar la última pregunta del set, donde el botón
+    "Siguiente" está deshabilitado y por lo tanto nunca se disparaba el guardado.
+    """
+    result = save_current_annotation()
+
+    if result is None:
+        st.session_state.save_feedback = ("warning", "Selecciona una categoría antes de guardar")
+    elif result == "error":
+        st.session_state.save_feedback = ("error", "No se pudo guardar. Reintenta en unos segundos.")
+    else:
+        st.session_state.save_feedback = ("success", f"✅ Anotación {result}")
+
+    st.rerun()
+
+def save_and_navigate(next_index):
+    """Guardar anotación actual y navegar"""
+    save_current_annotation()
     
     # Limpiar temporales
     st.session_state.temp_category = None
@@ -545,14 +576,31 @@ if st.session_state.get('filtered_data') is not None and len(st.session_state.fi
             )
             
             # Indicador de cambios sin guardar
-            if st.session_state.temp_category:
-                if not existing_annotation or (
-                    st.session_state.temp_category != existing_annotation.get('categoria') or
-                    st.session_state.temp_explanation != existing_annotation.get('explicacion', '')
-                ):
-                    st.warning("⚠️ Cambios sin guardar - Se guardarán al navegar")
+            hay_cambios_sin_guardar = bool(st.session_state.temp_category) and (
+                not existing_annotation
+                or st.session_state.temp_category != existing_annotation.get('categoria')
+                or st.session_state.temp_explanation != existing_annotation.get('explicacion', '')
+            )
+            if hay_cambios_sin_guardar:
+                st.warning("⚠️ Cambios sin guardar")
+            
+            # Guardar sin navegar: imprescindible en la última pregunta, donde
+            # "Siguiente" está deshabilitado y antes no había forma de guardar.
+            if st.button(
+                "💾 Guardar respuesta",
+                use_container_width=True,
+                type="primary" if hay_cambios_sin_guardar else "secondary",
+                disabled=not st.session_state.temp_category
+            ):
+                save_only()
+            
+            # Resultado del último guardado explícito (se muestra tras el rerun)
+            feedback = st.session_state.pop('save_feedback', None)
+            if feedback:
+                nivel, mensaje = feedback
+                getattr(st, nivel)(mensaje)
         
-        # Navegación - AQUÍ SE GUARDA TODO
+        # Navegación - al navegar también se guarda
         st.divider()
         st.markdown("### Navegación")
         
