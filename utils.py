@@ -3,9 +3,49 @@ from google.oauth2.service_account import Credentials
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import re
 import time
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
+
+# --- Cache de posiciones de fila -------------------------------------------
+# Cada navegación hacía 3 lecturas completas de la hoja (una por
+# save_annotation, otra por update_user_progress y otra por
+# get_user_annotations) más 2 escrituras. La API de Sheets permite ~60
+# lecturas y ~60 escrituras por minuto POR PROYECTO, y todos los médicos
+# comparten la misma service account: con dos o tres anotando en paralelo se
+# llegaba al 429 RESOURCE_EXHAUSTED y la anotación se perdía. Además cada
+# lectura traía la hoja entera, así que la app se ponía más lenta a medida que
+# avanzaba la sesión.
+#
+# Guardamos en qué fila vive cada anotación para poder escribir directo. Las
+# filas propias no se mueven: append siempre agrega al final y nadie borra
+# filas, así que el cache sigue siendo válido durante toda la sesión.
+
+
+def _annotation_key(username, pregunta_id, modelo):
+    return f"{username}|{pregunta_id}|{modelo}"
+
+
+def _build_row_index(all_values, username):
+    """Mapa clave -> número de fila para las anotaciones del usuario."""
+    row_index = {}
+
+    for idx, row in enumerate(all_values[1:], start=2):  # Skip header
+        if len(row) >= 4 and row[1] == username:
+            row_index[_annotation_key(username, row[2], row[3])] = idx
+
+    return row_index
+
+
+def _row_from_append(response):
+    """Fila en la que quedó un append_row, leída del updatedRange que
+    devuelve la API (p.ej. "anotaciones!A57:I57")."""
+    try:
+        rango = response['updates']['updatedRange'].split('!')[-1]
+        return int(re.search(r'[A-Z]+(\d+)', rango).group(1))
+    except Exception:
+        return None
 
 def init_gsheets_connection():
     """Inicializar conexión con Google Sheets usando las credenciales en secrets"""
@@ -91,57 +131,57 @@ def save_annotation(gsheets, username, pregunta_id, modelo, categoria, explicaci
     """Guardar o actualizar anotación en Google Sheets"""
     try:
         sheet = gsheets['annotations']
-        
-        # Obtener todos los valores (más eficiente que get_all_records)
-        all_values = sheet.get_all_values()
-        
-        # Si solo hay headers o está vacío, añadir directamente
-        if len(all_values) <= 1:
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            row_data = [
-                timestamp, username, str(pregunta_id), modelo, 
-                categoria, explicacion, str(es_correcta), 
-                cat1, cat2
-            ]
-            sheet.append_row(row_data)
-            return "guardada"
-        
-        # Buscar si existe anotación previa
-        existing_row = None
-        for idx, row in enumerate(all_values[1:], start=2):  # Skip header
-            if len(row) >= 4 and row[1] == username and str(row[2]) == str(pregunta_id) and row[3] == modelo:
-                existing_row = idx
-                break
-        
+
+        # Ubicar la fila sin releer la hoja completa. El índice se llena al
+        # cargar las anotaciones del usuario; si falta, se reconstruye una vez.
+        row_index = gsheets.get('row_index')
+        if row_index is None:
+            row_index = _build_row_index(sheet.get_all_values(), username)
+            gsheets['row_index'] = row_index
+
+        key = _annotation_key(username, pregunta_id, modelo)
+        existing_row = row_index.get(key)
+
         # Preparar datos
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         row_data = [
-            timestamp, username, str(pregunta_id), modelo, 
-            categoria, explicacion, str(es_correcta), 
+            timestamp, username, str(pregunta_id), modelo,
+            categoria, explicacion, str(es_correcta),
             cat1, cat2
         ]
-        
+
         if existing_row:
             # Actualizar fila existente
-            sheet.update(f'A{existing_row}:I{existing_row}', [row_data])
+            sheet.update([row_data], f'A{existing_row}:I{existing_row}')
             return "actualizada"
         else:
-            # Añadir nueva fila
-            sheet.append_row(row_data)
+            # Añadir nueva fila y recordar dónde quedó
+            response = sheet.append_row(row_data)
+            fila = _row_from_append(response)
+            if fila:
+                row_index[key] = fila
             return "guardada"
-    
+
     except Exception as e:
+        # El cache pudo quedar desalineado: forzar su reconstrucción
+        gsheets['row_index'] = None
         st.error(f"Error guardando anotación: {str(e)}")
         return "error"
 
 def get_user_annotations(gsheets, username):
-    """Obtener todas las anotaciones previas del usuario"""
+    """Obtener todas las anotaciones previas del usuario.
+
+    Es la única lectura completa de la hoja: aprovecha el recorrido para dejar
+    armado el índice de filas que usa save_annotation.
+    """
     try:
         sheet = gsheets['annotations']
         all_values = sheet.get_all_values()
-        
+
+        gsheets['row_index'] = _build_row_index(all_values, username)
+
         user_annotations = {}
-        
+
         # Si solo hay headers o está vacío, retornar dict vacío
         if len(all_values) <= 1:
             return user_annotations
@@ -166,18 +206,20 @@ def update_user_progress(gsheets, username, pregunta_id, total_anotadas, modelo=
     """Actualizar progreso del usuario"""
     try:
         sheet = gsheets['progress']
-        all_values = sheet.get_all_values()
-        
+
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        user_row = None
-        
-        # Buscar usuario existente (skip header)
-        if len(all_values) > 1:
-            for idx, row in enumerate(all_values[1:], start=2):
+
+        # La fila del usuario en la hoja de progreso no cambia durante la
+        # sesión, así que se busca una sola vez.
+        user_row = gsheets.get('progress_row')
+        if user_row is None:
+            all_values = sheet.get_all_values()
+            for idx, row in enumerate(all_values[1:], start=2):  # Skip header
                 if len(row) > 0 and row[0] == username:
                     user_row = idx
+                    gsheets['progress_row'] = idx
                     break
-        
+
         row_data = [
             username,
             str(pregunta_id),
@@ -187,12 +229,14 @@ def update_user_progress(gsheets, username, pregunta_id, total_anotadas, modelo=
         ]
 
         if user_row:
-            sheet.update(f'A{user_row}:E{user_row}', [row_data])
+            sheet.update([row_data], f'A{user_row}:E{user_row}')
         else:
-            sheet.append_row(row_data)
+            response = sheet.append_row(row_data)
+            gsheets['progress_row'] = _row_from_append(response)
 
     except Exception as e:
         # No mostrar error para no interrumpir flujo
+        gsheets['progress_row'] = None
         pass
 
 def get_user_progress(gsheets, username):
@@ -206,8 +250,9 @@ def get_user_progress(gsheets, username):
         sheet = gsheets['progress']
         all_values = sheet.get_all_values()
 
-        for row in all_values[1:]:  # Skip header
+        for idx, row in enumerate(all_values[1:], start=2):  # Skip header
             if len(row) > 1 and row[0] == username:
+                gsheets['progress_row'] = idx
                 return row[1], (row[4] if len(row) > 4 else "")
 
     except Exception as e:

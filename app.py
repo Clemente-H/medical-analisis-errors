@@ -385,16 +385,11 @@ def save_and_navigate(next_index):
     st.session_state.temp_category = None
     st.session_state.temp_explanation = ""
     
-    # Navegar
+    # Navegar. No se recargan las anotaciones desde la hoja: nadie más edita
+    # las del usuario, y save_current_annotation() ya actualizó el cache local.
+    # Esa recarga era una lectura completa de la hoja por cada click.
     if 0 <= next_index < len(st.session_state.filtered_data):
         st.session_state.current_index = next_index
-        
-        # Recargar anotaciones del usuario para obtener datos actualizados
-        st.session_state.user_annotations = get_user_annotations(
-            st.session_state.gsheets, 
-            st.session_state.username
-        )
-        
         st.rerun()
 
 # VERIFICAR LOGIN
@@ -448,6 +443,14 @@ with st.sidebar:
     # Progreso
     total_anotadas = len(st.session_state.user_annotations)
     st.metric("Tus anotaciones", total_anotadas)
+
+    # Resincronizar a mano, ya que las anotaciones no se releen al navegar
+    if st.button("🔄 Recargar anotaciones", use_container_width=True):
+        st.session_state.user_annotations = get_user_annotations(
+            st.session_state.gsheets,
+            st.session_state.username
+        )
+        st.rerun()
     
     st.divider()
     
