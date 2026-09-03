@@ -1,8 +1,10 @@
 import streamlit as st
 import pandas as pd
 import json
+import io
 import os
 from datetime import datetime
+from PIL import Image
 import time
 from utils import (
     init_gsheets_connection,
@@ -176,6 +178,38 @@ def show_login():
         
         # Nota informativa
         st.info("💡 Solicita la contraseña al administrador del sistema")
+
+# Las imágenes originales pesan ~440 KB de mediana y hasta 1.6 MB, y Streamlit
+# retiene en memoria del servidor cada archivo que sirve. Recorrer las 92
+# preguntas de una sesión hacía crecer la RAM contra el límite de Streamlit
+# Cloud (1 GB) y el contenedor se reiniciaba, llevándose la sesión completa.
+# Recomprimir a calidad 85 deja las imágenes en ~23% del peso original sin
+# pérdida visible, y el cache acota cuántas se mantienen vivas a la vez.
+IMAGE_MAX_SIDE = 1400
+IMAGE_QUALITY = 85
+IMAGE_CACHE_ENTRIES = 24
+
+@st.cache_data(max_entries=IMAGE_CACHE_ENTRIES, show_spinner=False)
+def load_image_bytes(image_path, mtime):
+    """Imagen recomprimida y lista para st.image.
+
+    mtime entra en la clave del cache sólo para que reemplazar el archivo
+    invalide la entrada; no se usa dentro de la función.
+    """
+    with Image.open(image_path) as img:
+        img = img.convert("RGB")
+
+        # Salvaguarda para imágenes futuras: hoy ninguna llega a este tamaño
+        lado_mayor = max(img.width, img.height)
+        if lado_mayor > IMAGE_MAX_SIDE:
+            escala = IMAGE_MAX_SIDE / lado_mayor
+            nuevo = (round(img.width * escala), round(img.height * escala))
+            img = img.resize(nuevo, Image.LANCZOS)
+
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=IMAGE_QUALITY, optimize=True)
+
+    return buffer.getvalue()
 
 def extract_model_answer(json_str):
     """Extrae la respuesta del modelo"""
@@ -595,7 +629,11 @@ if st.session_state.get('filtered_data') is not None and len(st.session_state.fi
         if 'ruta' in row and row['ruta']:
             image_path = os.path.join("data/imagenes", row['ruta'])
             if os.path.exists(image_path):
-                st.image(image_path, caption=row['nombre_imagen'], use_column_width=True)
+                st.image(
+                    load_image_bytes(image_path, os.path.getmtime(image_path)),
+                    caption=row['nombre_imagen'],
+                    use_column_width=True
+                )
             else:
                 st.warning(f"Imagen no encontrada")
     
