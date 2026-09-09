@@ -363,20 +363,51 @@ def last_answered_position(filtered, user_annotations):
 
     return None
 
+def incompleta_msg():
+    """Qué falta exactamente para poder guardar y avanzar."""
+    if not st.session_state.temp_category:
+        return "⚠️ Falta elegir una categoría de error."
+    return "⚠️ Falta el comentario: es obligatorio para guardar y pasar de pregunta."
+
+def current_explanation():
+    """Comentario escrito, sin espacios sobrantes. Es un campo obligatorio."""
+    return (st.session_state.temp_explanation or "").strip()
+
+def annotation_status():
+    """Estado de lo que el usuario lleva escrito en la pregunta actual.
+
+    "vacia"      -> no tocó nada (o la respuesta es correcta): nada que guardar
+    "incompleta" -> falta la categoría o el comentario, que ahora es obligatorio
+    "completa"   -> se puede guardar
+    """
+    row = st.session_state.filtered_data.iloc[st.session_state.current_index]
+    if row['es_correcta']:
+        return "vacia"
+
+    tiene_categoria = bool(st.session_state.temp_category)
+    tiene_explicacion = bool(current_explanation())
+
+    if tiene_categoria and tiene_explicacion:
+        return "completa"
+    if tiene_categoria or tiene_explicacion:
+        # También cuenta como incompleta una anotación guardada cuando el
+        # comentario era opcional: hay que completarla para poder seguir.
+        return "incompleta"
+    return "vacia"
+
 def save_current_annotation():
     """Guardar la anotación de la pregunta actual en Google Sheets.
 
     Devuelve el resultado de save_annotation ("guardada" / "actualizada" /
-    "error"), o None si no había nada que guardar. Se separó de la navegación
-    para que el guardado no dependa de poder avanzar de pregunta.
+    "error"), o el propio estado ("vacia" / "incompleta") si no había nada
+    guardable. Se separó de la navegación para que el guardado no dependa de
+    poder avanzar de pregunta.
     """
-    if not st.session_state.temp_category:
-        return None
+    estado = annotation_status()
+    if estado != "completa":
+        return estado
 
     row = st.session_state.filtered_data.iloc[st.session_state.current_index]
-    if row['es_correcta']:
-        return None
-
     current_key = f"{row['id']}-{row['modelo']}"
 
     result = save_annotation(
@@ -385,7 +416,7 @@ def save_current_annotation():
         row['id'],
         row['modelo'],
         st.session_state.temp_category,
-        st.session_state.temp_explanation,
+        current_explanation(),
         row['es_correcta'],
         row['categoria_1'],
         row['categoria_2']
@@ -395,7 +426,7 @@ def save_current_annotation():
         # Actualizar cache local
         st.session_state.user_annotations[current_key] = {
             'categoria': st.session_state.temp_category,
-            'explicacion': st.session_state.temp_explanation,
+            'explicacion': current_explanation(),
             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 
@@ -418,8 +449,12 @@ def save_only():
     """
     result = save_current_annotation()
 
-    if result is None:
-        st.session_state.save_feedback = ("warning", "Selecciona una categoría antes de guardar")
+    if result == "vacia":
+        st.session_state.save_feedback = (
+            "warning", "Selecciona una categoría y escribe un comentario antes de guardar"
+        )
+    elif result == "incompleta":
+        st.session_state.save_feedback = ("warning", incompleta_msg())
     elif result == "error":
         st.session_state.save_feedback = ("error", "No se pudo guardar. Reintenta en unos segundos.")
     else:
@@ -428,9 +463,18 @@ def save_only():
     st.rerun()
 
 def save_and_navigate(next_index):
-    """Guardar anotación actual y navegar"""
-    save_current_annotation()
-    
+    """Guardar anotación actual y navegar.
+
+    Si la anotación está a medias no se navega: el comentario es obligatorio y
+    salir de la pregunta descartaría en silencio lo ya escrito.
+    """
+    result = save_current_annotation()
+
+    if result == "incompleta":
+        st.session_state.save_feedback = ("warning", incompleta_msg())
+        st.rerun()
+        return
+
     # Limpiar temporales
     st.session_state.temp_category = None
     st.session_state.temp_explanation = ""
@@ -640,7 +684,10 @@ if st.session_state.get('filtered_data') is not None and len(st.session_state.fi
             if existing_annotation:
                 st.info(f"Ya categorizado: {existing_annotation['categoria']}")
             
-            st.caption("Selecciona la categoría de error que mejor describe el problema principal:")
+            st.caption(
+                "Selecciona la categoría de error que mejor describe el problema principal. "
+                "El comentario es obligatorio."
+            )
             
             # Botones de categorías (verticales) - NO GUARDAN, solo actualizan temporal
             for cat_code, cat_info in ERROR_CATEGORIES.items():
@@ -660,29 +707,33 @@ if st.session_state.get('filtered_data') is not None and len(st.session_state.fi
             st.markdown("### 📝 Contexto Adicional")
             
             st.session_state.temp_explanation = st.text_area(
-                "Explica tu decisión (opcional pero recomendado):",
+                "Explica tu decisión (obligatorio):",
                 value=st.session_state.temp_explanation,
                 height=120,
                 placeholder="¿Por qué elegiste esta categoría? ¿Qué error específico cometió el modelo?",
                 key=f"explanation_{current_key}"
             )
-            
+
+            estado_anotacion = annotation_status()
+
             # Indicador de cambios sin guardar
-            hay_cambios_sin_guardar = bool(st.session_state.temp_category) and (
+            hay_cambios_sin_guardar = estado_anotacion == "completa" and (
                 not existing_annotation
                 or st.session_state.temp_category != existing_annotation.get('categoria')
-                or st.session_state.temp_explanation != existing_annotation.get('explicacion', '')
+                or current_explanation() != existing_annotation.get('explicacion', '')
             )
             if hay_cambios_sin_guardar:
                 st.warning("⚠️ Cambios sin guardar - se guardan solos al pasar de pregunta")
-            
+            elif estado_anotacion == "incompleta":
+                st.warning(incompleta_msg())
+
             # Guardar sin navegar: imprescindible en la última pregunta, donde
             # "Siguiente" está deshabilitado y antes no había forma de guardar.
             if st.button(
                 "💾 Guardar respuesta",
                 use_container_width=True,
                 type="primary" if hay_cambios_sin_guardar else "secondary",
-                disabled=not st.session_state.temp_category
+                disabled=estado_anotacion != "completa"
             ):
                 save_only()
             
@@ -697,7 +748,10 @@ if st.session_state.get('filtered_data') is not None and len(st.session_state.fi
         st.markdown("### Navegación")
 
         if not row['es_correcta']:
-            st.caption("💾 Tu respuesta se guarda automáticamente al pasar de pregunta.")
+            st.caption(
+                "💾 Tu respuesta se guarda automáticamente al pasar de pregunta. "
+                "Necesitas categoría y comentario para poder avanzar."
+            )
 
         col1, col2 = st.columns(2)
         with col1:
