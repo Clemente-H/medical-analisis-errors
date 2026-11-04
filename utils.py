@@ -8,6 +8,20 @@ import time
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 
+# Columnas de la hoja "anotaciones". El código las lee por posición, así que
+# las nuevas siempre van al final: insertar una en medio desalinea las filas
+# que ya existen.
+ANNOTATION_HEADERS = [
+    "timestamp", "usuario", "pregunta_id", "modelo",
+    "categoria_error", "explicacion", "es_correcta",
+    "categoria_1", "categoria_2",
+    "pregunta", "respuesta_modelo", "respuesta_correcta",
+    "justificacion_modelo"
+]
+# Columnas que existían antes de agregar el contexto de la pregunta
+ANNOTATION_ORIGINAL_COLS = 9
+ANNOTATION_LAST_COL = gspread.utils.rowcol_to_a1(1, len(ANNOTATION_HEADERS))[:-1]
+
 # --- Cache de posiciones de fila -------------------------------------------
 # Cada navegación hacía 3 lecturas completas de la hoja (una por
 # save_annotation, otra por update_user_progress y otra por
@@ -40,12 +54,30 @@ def _build_row_index(all_values, username):
 
 def _row_from_append(response):
     """Fila en la que quedó un append_row, leída del updatedRange que
-    devuelve la API (p.ej. "anotaciones!A57:I57")."""
+    devuelve la API (p.ej. "anotaciones!A57:M57")."""
     try:
         rango = response['updates']['updatedRange'].split('!')[-1]
         return int(re.search(r'[A-Z]+(\d+)', rango).group(1))
     except Exception:
         return None
+
+
+def _ensure_annotation_columns(sheet, header_row):
+    """Deja la hoja lista para escribir todas las columnas de anotación.
+
+    sheet.update falla con "exceeds grid limits" si el rango se sale de la
+    grilla, y las hojas creadas por versiones anteriores tienen 10 columnas.
+    Sólo toca la fila 1 y las columnas nuevas: las filas de datos no cambian.
+    """
+    faltantes = len(ANNOTATION_HEADERS) - sheet.col_count
+    if faltantes > 0:
+        sheet.add_cols(faltantes)
+
+    nuevos = ANNOTATION_HEADERS[ANNOTATION_ORIGINAL_COLS:]
+    if header_row[ANNOTATION_ORIGINAL_COLS:len(ANNOTATION_HEADERS)] != nuevos:
+        primera = gspread.utils.rowcol_to_a1(1, ANNOTATION_ORIGINAL_COLS + 1)
+        sheet.update([nuevos], f'{primera}:{ANNOTATION_LAST_COL}1')
+
 
 def init_gsheets_connection():
     """Inicializar conexión con Google Sheets usando las credenciales en secrets"""
@@ -78,25 +110,23 @@ def init_gsheets_connection():
         try:
             annotations_sheet = spreadsheet.worksheet("anotaciones")
             # Verificar si tiene headers
-            if not annotations_sheet.get_all_values():
-                annotations_sheet.append_row([
-                    "timestamp", "usuario", "pregunta_id", "modelo", 
-                    "categoria_error", "explicacion", "es_correcta", 
-                    "categoria_1", "categoria_2"
-                ])
+            annotation_header = annotations_sheet.row_values(1)
+            if not annotation_header:
+                annotations_sheet.append_row(ANNOTATION_HEADERS)
+                annotation_header = ANNOTATION_HEADERS
         except:
             # Crear hoja si no existe
             annotations_sheet = spreadsheet.add_worksheet(
-                title="anotaciones", 
-                rows=1000, 
-                cols=10
+                title="anotaciones",
+                rows=1000,
+                cols=len(ANNOTATION_HEADERS)
             )
-            annotations_sheet.append_row([
-                "timestamp", "usuario", "pregunta_id", "modelo", 
-                "categoria_error", "explicacion", "es_correcta", 
-                "categoria_1", "categoria_2"
-            ])
-        
+            annotations_sheet.append_row(ANNOTATION_HEADERS)
+            annotation_header = ANNOTATION_HEADERS
+
+        # Fuera del try: un fallo aquí no significa que falte la hoja
+        _ensure_annotation_columns(annotations_sheet, annotation_header)
+
         try:
             progress_sheet = spreadsheet.worksheet("progreso_usuarios")
             # Verificar si tiene headers
@@ -127,7 +157,8 @@ def init_gsheets_connection():
         st.error(f"Error conectando con Google Sheets: {str(e)}")
         st.stop()
 
-def save_annotation(gsheets, username, pregunta_id, modelo, categoria, explicacion, es_correcta, cat1, cat2):
+def save_annotation(gsheets, username, pregunta_id, modelo, categoria, explicacion, es_correcta, cat1, cat2,
+                    pregunta, respuesta_modelo, respuesta_correcta, justificacion_modelo):
     """Guardar o actualizar anotación en Google Sheets"""
     try:
         sheet = gsheets['annotations']
@@ -147,12 +178,13 @@ def save_annotation(gsheets, username, pregunta_id, modelo, categoria, explicaci
         row_data = [
             timestamp, username, str(pregunta_id), modelo,
             categoria, explicacion, str(es_correcta),
-            cat1, cat2
+            cat1, cat2,
+            pregunta, respuesta_modelo, respuesta_correcta, justificacion_modelo
         ]
 
         if existing_row:
             # Actualizar fila existente
-            sheet.update([row_data], f'A{existing_row}:I{existing_row}')
+            sheet.update([row_data], f'A{existing_row}:{ANNOTATION_LAST_COL}{existing_row}')
             return "actualizada"
         else:
             # Añadir nueva fila y recordar dónde quedó

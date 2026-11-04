@@ -318,6 +318,17 @@ def format_justification(justification):
             return parts[1].replace("json\n", "")
     return justification
 
+def model_justification(respuesta_modelo):
+    """Justificación del modelo; si no viene como JSON válido, el texto crudo"""
+    formatted = format_justification(respuesta_modelo)
+    try:
+        json_data = json.loads(formatted)
+        if 'Justificacion' in json_data:
+            return json_data['Justificacion']
+    except Exception:
+        pass
+    return formatted
+
 def resume_index(filtered, user_annotations, last_id, last_modelo):
     """Índice en el que debe retomar el usuario al abrir la sesión.
 
@@ -419,7 +430,11 @@ def save_current_annotation():
         current_explanation(),
         row['es_correcta'],
         row['categoria_1'],
-        row['categoria_2']
+        row['categoria_2'],
+        row['pregunta'],
+        row['respuesta_extraida'],
+        row['respuesta_correcta'],
+        model_justification(row['respuesta_modelo'])
     )
 
     if result != "error":
@@ -647,19 +662,11 @@ if st.session_state.get('filtered_data') is not None and len(st.session_state.fi
         
         # 2. Justificación del Modelo (segundo)
         st.subheader("Justificación del Modelo")
-        formatted_just = format_justification(row['respuesta_modelo'])
-        try:
-            json_data = json.loads(formatted_just)
-            if 'Justificacion' in json_data:
-                st.markdown(f"<div class='justification-box'>{json_data['Justificacion']}</div>", 
-                          unsafe_allow_html=True)
-            else:
-                st.markdown(f"<div class='justification-box'>{formatted_just}</div>", 
-                          unsafe_allow_html=True)
-        except:
-            st.markdown(f"<div class='justification-box'>{formatted_just}</div>", 
-                       unsafe_allow_html=True)
-        
+        st.markdown(
+            f"<div class='justification-box'>{model_justification(row['respuesta_modelo'])}</div>",
+            unsafe_allow_html=True
+        )
+
         # 3. Imagen (último)
         if 'ruta' in row and row['ruta']:
             image_path = os.path.join("data/imagenes", row['ruta'])
